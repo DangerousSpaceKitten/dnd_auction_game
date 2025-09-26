@@ -50,17 +50,17 @@ def print_info(agent_id:str, current_round:int, states:dict, auctions:dict, prev
         gold.append(state["gold"])
         points.append(state["points"])
 
-    sum_reminder_gold_income = sum(bank_state["gold_income_per_round"])
-    mean_reminder_interest_rate = sum(bank_state["bank_interest_per_round"]) / max(1, len(bank_state["bank_interest_per_round"]))
-    mean_reminder_bank_limit = sum(bank_state["bank_limit_per_round"]) / max(1, len(bank_state["bank_limit_per_round"]))
+    sum_remainder_gold_income = sum(bank_state["gold_income_per_round"])
+    mean_remainder_interest_rate = sum(bank_state["bank_interest_per_round"]) / max(1, len(bank_state["bank_interest_per_round"]))
+    mean_remainder_bank_limit = sum(bank_state["bank_limit_per_round"]) / max(1, len(bank_state["bank_limit_per_round"]))
 
 
-    print(" - reminder -")
-    if sum_reminder_gold_income > 0:
+    print(" - remainder -")
+    if sum_remainder_gold_income > 0:
         print("Next round we will get {} gold, max bank limit is: {} and interest rate is: {}".format(bank_state["gold_income_per_round"][0], bank_state["bank_limit_per_round"][0], bank_state["bank_interest_per_round"][0]))
-        print("Gold: {}".format(sum_reminder_gold_income))    
-        print("Mean Interest: {:.2f}".format(mean_reminder_interest_rate))
-        print("Mean Bank Limit: {:.2f}".format(mean_reminder_bank_limit))
+        print("Gold: {}".format(sum_remainder_gold_income))    
+        print("Mean Interest: {:.2f}".format(mean_remainder_interest_rate))
+        print("Mean Bank Limit: {:.2f}".format(mean_remainder_bank_limit))
 
 
     print(" - other agents -")

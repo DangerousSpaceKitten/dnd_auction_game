@@ -72,12 +72,12 @@ class AuctionGameClient:
                     #                     
                     current_round = round_data["round"]
 
-                    reminder_random_info = {}
-                    reminder_random_info["gold_income_per_round"] = round_data["reminder_gold_income"]
-                    reminder_random_info["bank_interest_per_round"] = round_data["reminder_bank_interest"]
-                    reminder_random_info["bank_limit_per_round"] = round_data["reminder_bank_limit"]
+                    remainder_random_info = {}
+                    remainder_random_info["gold_income_per_round"] = round_data["remainder_gold_income"]
+                    remainder_random_info["bank_interest_per_round"] = round_data["remainder_bank_interest"]
+                    remainder_random_info["bank_limit_per_round"] = round_data["remainder_bank_limit"]
                     
-                    new_bids = bid_callback(self.agent_id, current_round, round_data["states"], round_data["auctions"], round_data["prev_auctions"], reminder_random_info)                    
+                    new_bids = bid_callback(self.agent_id, current_round, round_data["states"], round_data["auctions"], round_data["prev_auctions"], remainder_random_info)                    
                     await sock.send(json.dumps(new_bids))
         
         except ConnectionClosedError:

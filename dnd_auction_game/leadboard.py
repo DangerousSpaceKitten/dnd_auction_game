@@ -55,6 +55,7 @@ jjinja_template = """
     {% else %}
     <h1>Scoreboard - Round {{ round }}</h1>
     {% endif %}
+    <b>Gold Income: {{ gold_income }} | Interest Rate: {{ "%.2f"|format(interest_rate) }} | Limit: {{gold_limit}}</b>
     <table>
         <thead>
             <tr>
@@ -83,10 +84,10 @@ jjinja_template = """
 """
 
 
-def generate_leadboard(players, round, is_done):
+def generate_leadboard(players, round, is_done, bank_state):
 
     template = Template(jjinja_template)
-    return template.render(players=players, round=round, is_done=is_done)
+    return template.render(players=players, round=round, is_done=is_done, gold_income=bank_state["gold_income_per_round"], interest_rate=bank_state["bank_interest_per_round"], gold_limit=bank_state["bank_limit_per_round"])
 
 
 

@@ -15,7 +15,10 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        try:
+            self.active_connections.remove(websocket)
+        except:
+            pass
         
     async def disconnect_all(self):
         print("disconnect all")
@@ -29,7 +32,10 @@ class ConnectionManager:
         self.active_connections = []
 
     async def send_message(self, message: dict, websocket: WebSocket):
-        await websocket.send_json(message)
+        try:
+            await websocket.send_json(message)
+        except:
+            pass
 
     async def broadcast(self, message: dict):
         to_disconnect = []
@@ -40,8 +46,15 @@ class ConnectionManager:
                 to_disconnect.append(connection)
 
         for connection in to_disconnect:
-            await connection.close()
-            self.disconnect(connection)
+            try:
+                await connection.close()
+            except:
+                pass
+
+            try:
+                self.disconnect(connection)
+            except:
+                pass
                 
             
 

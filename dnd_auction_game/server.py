@@ -24,7 +24,7 @@ from dnd_auction_game.leadboard import generate_leadboard
 game_token = os.environ.get("AH_GAME_TOKEN", "play123")
 play_token = os.environ.get("AH_PLAY_TOKEN", "play123")
 
-save_all_states = os.environ.get("AH_SAVE_ALL_STATES", 0)
+save_all_states = int(os.environ.get("AH_SAVE_ALL_STATES", 0))
 
 import pickle
 
@@ -47,8 +47,13 @@ async def server_tick():
     while True:
         
         if auction_house.is_active:
-
-            auction_house.process_all_bids()
+            
+            try:
+                auction_house.process_all_bids()
+            except Exception as e:
+                print("error in process_all_bids")
+                print(e)
+            
             try:
                 round_data = auction_house.prepare_auction()
             except Exception as e:
@@ -181,6 +186,21 @@ async def get():
         name = auction_house.names[a_id]        
         leadboard.append([name, info["points"], info["gold"]])
 
+
+    gold_income = 1000
+    interest_rate = 1.0
+    gold_limit = 2000
+
+    try:
+        gold_income = auction_house.gold_income_per_round[auction_house.round_counter]
+        interest_rate = auction_house.bank_interest_per_round[auction_house.round_counter]
+        gold_limit = auction_house.bank_limit_per_round[auction_house.round_counter]
+
+    except IndexError:
+        pass
+
+
+
     all_players = []
     leadboard.sort(key=lambda x:x[1], reverse=True)
     n_players = max(len(leadboard), 1)
@@ -195,9 +215,9 @@ async def get():
                 grade = "A"
             elif rank > 0.75:
                 grade = "B"
-            elif rank > 0.55:
+            elif rank > 0.50:
                 grade = "C"
-            elif rank > 0.35:
+            elif rank > 0.30:
                 grade = "D"
             else:
                 grade = "E"
@@ -207,6 +227,7 @@ async def get():
 
     return HTMLResponse(generate_leadboard(all_players,
                                            auction_house.round_counter,
-                                           auction_house.is_done))
+                                           auction_house.is_done,
+                                           bank_state={"gold_income_per_round": gold_income, "bank_interest_per_round": interest_rate, "bank_limit_per_round": gold_limit}))
 
 

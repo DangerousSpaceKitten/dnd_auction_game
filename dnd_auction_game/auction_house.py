@@ -11,11 +11,11 @@ import os
 def generate_gold_random_walk(n_steps:int) -> List[float]:
 
     gold_per_round = 1000
-    step_size = 100
-    max_gold_per_round = 10000
+    step_size = 150
+    max_gold_per_round = 3000
 
     gold = [gold_per_round]
-    for _ in range(n_steps-1):
+    for i in range(n_steps-1):
         next_gold = gold[-1] + random.randint(-step_size, step_size)
 
         if next_gold < 0:
@@ -26,16 +26,19 @@ def generate_gold_random_walk(n_steps:int) -> List[float]:
 
         gold.append(next_gold)
 
+        if i % 500 == 0:
+            gold[-1] = gold_per_round
+
     return gold
 
 def braavos_bank_limit_random_walk(n_steps:int) -> List[int]:
 
     upper_limit_start = 2000
     upper_limit_end = 10000
-    step_size = 100
+    step_size = 150
 
     upper_limits = [upper_limit_start]
-    for _ in range(n_steps-1):
+    for i in range(n_steps-1):
         next_limit = upper_limits[-1] + random.randint(-step_size, step_size)
 
         if next_limit < 0:
@@ -46,17 +49,20 @@ def braavos_bank_limit_random_walk(n_steps:int) -> List[int]:
 
         upper_limits.append(next_limit)
 
+        if i % 300 == 0:
+            upper_limits[-1] = upper_limit_start
+
     return upper_limits
 
 def braavos_bank_interest_rate_random_walk(n_steps:int) -> List[float]:
 
-    start_rate = 1.05
-    min_rate = 0.9
+    start_rate = 1.03
+    min_rate = 0.85
     max_rate = 1.15
-    step_size = 0.01
+    step_size = 0.02
 
     rates = [start_rate]
-    for _ in range(n_steps-1):
+    for i in range(n_steps-1):
         next_rate = rates[-1] + random.uniform(-step_size, step_size)
 
         if next_rate < min_rate:
@@ -66,6 +72,10 @@ def braavos_bank_interest_rate_random_walk(n_steps:int) -> List[float]:
             next_rate = max_rate
 
         rates.append(next_rate)
+
+        if i % 250 == 0:
+            rates[-1] = start_rate
+
 
     return rates
 
@@ -204,9 +214,9 @@ class AuctionHouse:
             "states": self.agents,
             "auctions": self.current_auctions,
             "prev_auctions": out_prev_state,
-            "reminder_gold_income": self.gold_income_per_round[self.round_counter+1:], # +1 as we want to report on the next state - not the current state
-            "reminder_bank_limit": self.bank_limit_per_round[self.round_counter+1:],
-            "reminder_bank_interest": self.bank_interest_per_round[self.round_counter+1:],
+            "remainder_gold_income": self.gold_income_per_round[self.round_counter+1:], # +1 as we want to report on the next state - not the current state
+            "remainder_bank_limit": self.bank_limit_per_round[self.round_counter+1:],
+            "remainder_bank_interest": self.bank_interest_per_round[self.round_counter+1:],
         }
 
         if self.save_logs and self.log_file is not None:
@@ -260,19 +270,22 @@ class AuctionHouse:
         
         for auction_id, bids in self.current_bids.items():
 
-            if not bids or len(bids) == 0:
-                continue
+            try:
+                if not bids or len(bids) == 0:
+                    continue
 
-            win_amount = max(bids, key=lambda x:x[1])[1]
-            for a_id, bid in bids:
-                if bid == win_amount:
-                    self.agents[a_id]["points"] += self.current_rolls[auction_id]
-                
-                else:
-                    # cashback
-                    back_value = int(math.floor(bid * self.gold_back_fraction))
-                    self.agents[a_id]["gold"] += back_value
-            
+                win_amount = max(bids, key=lambda x:x[1])[1]
+                for a_id, bid in bids:
+                    if bid == win_amount:
+                        self.agents[a_id]["points"] += self.current_rolls[auction_id]
+                    
+                    else:
+                        # cashback
+                        back_value = int(math.floor(bid * self.gold_back_fraction))
+                        self.agents[a_id]["gold"] += back_value
+            except:
+                print(" -- inner crash --")
+                continue
 
 
     
