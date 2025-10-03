@@ -196,7 +196,7 @@ class AuctionHouse:
             else:
                 interest_available_gold = agent["gold"]
             
-            agent["gold"] = int(interest_available_gold * interest_rate)            
+            agent["gold"] += int(interest_available_gold * interest_rate)            
             agent["gold"] += gold_income
 
                 
