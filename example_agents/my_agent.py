@@ -1,24 +1,47 @@
-# example_agents/agent_ev_learner.py
-from __future__ import annotations
 import math
 import random
 import os
+import sys
+import threading
 
 from collections import defaultdict
 from typing import Dict, Tuple, Any
 from dnd_auction_game import AuctionGameClient
+
 # ---- Dashboard here  ------------------------------------------
-ALPHA_FAIR_PRICE_PER_POINT = 15.0   # baseline price per expected point when no history
-WIN_MARGIN = 1.05                   # bid slightly above learned winning price
-MAX_SPEND_FRACTION = 0.95           # leave a little buffer to avoid overspending
+FIRST_FAIR_PRICE_PER_POINT = 15.0
+WIN_MARGIN = 1.05
+MAX_SPEND_FRACTION = 0.95
 MIN_BID = 1.0
-TIE_JITTER_MAX = 3.0                # add up to this many gold to avoid ties
-LEARN_DECAY = 0.8                   # EMA decay for learned winning prices
-CAP_BID_AT_GOLD = True              # never bid more than available
-IGNORE_LOW_EV = 0.5                 # ignore auctions with too small EV
+TIE_JITTER_MAX = 3.0
+LEARN_DECAY = 0.8
+CAP_BID_AT_GOLD = True
+IGNORE_LOW_EV = 0.5
 # -----------------------------------------------------------------------------
 
-# Internal store across rounds (the server imports this module and calls make_bid)
+manual_trigger = False
+
+def _listen_for_manual_trigger():
+    """Background stdin listener. Type 'spend' (or 's') to trigger."""
+    global manual_trigger
+    print("[Manual control] Type 'spend' and press Enter (or just press Enter) "
+          "to spend 20% of current gold across the 5 highest-EV auctions.")
+    print("[Manual control] Type 'quit' or 'exit' to stop the listener.")
+    try:
+        for line in sys.stdin:
+            cmd = (line or "").strip().lower()
+            if cmd in {"spend", "s"}:
+                manual_trigger = True
+                print("[Manual control] Trigger set: next bid will spend 20% across top-5 EV.")
+            elif cmd in {"quit", "exit", "q"}:
+                print("[Manual control] Listener exiting.")
+                break
+    except Exception as e:
+        print(f"[Manual control] Listener error: {e}")
+
+threading.Thread(target=_listen_for_manual_trigger, daemon=True).start()
+
+
 _learned_win_prices: Dict[Tuple[int,int,int], float] = defaultdict(float)
 
 def _auction_key(a: Dict[str, Any]) -> Tuple[int,int,int]:
@@ -34,45 +57,34 @@ def _ema_update(old: float, new: float, decay: float) -> float:
     return decay * old + (1.0 - decay) * new
 
 def _estimate_competitiveness(states: Dict[str, Any], n_auctions: int) -> float:
-    # crude heuristic: more players per auction => tougher market
     n_players = max(1, len(states))
     return max(1.0, n_players / max(1, n_auctions))
 
 def _reserve_for_interest(gold: float, bank_state: Dict[str, Any]) -> float:
-    """
-    Keep some gold if interest next round is enticing (and within cap).
-    bank_state structure (per README):
-      gold_income_per_round, bank_interest_per_round, bank_limit_per_round
-      index [0] gives next round
-    """
     if not bank_state:
         return 0.0
     try:
-        r = float(bank_state["bank_interest_per_round"][0])  # e.g., 0.10 for 10%
-        cap = float(bank_state["bank_limit_per_round"][0])   # interest applies up to this
+        r = float(bank_state["bank_interest_per_round"][0])
+        cap = float(bank_state["bank_limit_per_round"][0])
     except Exception:
         return 0.0
 
     if r <= 0:
         return 0.0
 
-    # Simple policy: reserve proportionally to r, up to the cap and current gold.
-    # If r=10%, reserve ~20% of gold (capped), if r=20%, reserve ~35%, etc.
-    reserve_frac = min(0.5, 2.0 * r + 0.0)  # clamp to 50% max
+    # reserve proportionally to interest rate, clamped.
+    reserve_frac = min(0.5, 2.0 * r + 0.0)
     target_reserve = min(cap, gold) * reserve_frac
-    return max(0.0, min(target_reserve, gold * 0.5))  # also clamp to 50% of current gold
+    return max(0.0, min(target_reserve, gold * 0.5))
 
 def _learn_from_prev(prev_auctions: Dict[str, Any]) -> None:
-    # prev_auctions[auction_id] has {"die","num","bonus","reward","bids":[(agent_id,bid),...]} (winner first)
     for _aid, info in (prev_auctions or {}).items():
         try:
             k = _auction_key(info)
             bids = info.get("bids") or []
             if not bids:
                 continue
-            # winning bid is first in list per README
             win_bid = float(bids[0][1]) if isinstance(bids[0], (list, tuple)) else float(bids[0]["bid"])
-            # update EMA of typical winning price for this auction type
             _learned_win_prices[k] = _ema_update(_learned_win_prices[k], win_bid, LEARN_DECAY)
         except Exception:
             continue
@@ -93,18 +105,14 @@ def _suggest_bid_for_auction(
     if learned > 0:
         fair = learned * WIN_MARGIN
     else:
-        # No history: set a fair price proportional to EV, scaled by competitiveness.
-        fair = ALPHA_FAIR_PRICE_PER_POINT * ev * (0.75 + 0.25 * competitiveness)
+        fair = FIRST_FAIR_PRICE_PER_POINT * ev * (0.75 + 0.25 * competitiveness)
 
-    # Never exceed current available gold if configured (otherwise you risk forced overspend).
     if CAP_BID_AT_GOLD:
         fair = min(fair, max(0.0, available))
 
-    # Add a tiny jitter to avoid ties between similar agents.
     jitter = random.uniform(0.0, TIE_JITTER_MAX)
     bid = max(MIN_BID, fair + jitter)
 
-    # Safety: don't bid absurd numbers
     return max(0.0, float(bid))
 
 def make_bid(
@@ -115,10 +123,9 @@ def make_bid(
     prev_auctions: Dict[str, Any],
     bank_state: Dict[str, Any],
 ) -> Dict[str, float]:
-    """
-    Return a dict: {auction_id: bid_amount}
-    """
-    # learn from last round
+
+    global manual_trigger
+
     try:
         _learn_from_prev(prev_auctions)
     except Exception:
@@ -127,23 +134,33 @@ def make_bid(
     my = states.get(agent_id, {}) or {}
     my_gold = float(my.get("gold", 0.0))
 
-    # Keep a bit unspent to avoid round-off + to allow interest
+    if manual_trigger and auctions:
+        manual_trigger = False 
+        spend_amount = 0.20 * my_gold
+        if spend_amount > 0:
+            top = sorted(auctions.items(),
+                         key=lambda kv: _expected_points(kv[1]),
+                         reverse=True)[:5]
+            if top:
+                per = max(MIN_BID, spend_amount / len(top))
+                bids = {a_id: round(per, 2) for a_id, _ in top}
+                print(f"[Manual control] Spending {spend_amount:.1f} gold "
+                      f"({per:.1f} each) on {len(top)} top-EV auctions.")
+                return bids
+
     budget = my_gold * MAX_SPEND_FRACTION
     reserve = _reserve_for_interest(my_gold, bank_state)
     spendable = max(0.0, budget - reserve)
 
     comp = _estimate_competitiveness(states, len(auctions))
 
-    # Score auctions by EV / (suggested bid), i.e., points per gold
     plan = []
     for a_id, a in (auctions or {}).items():
-        # For planning we pretend we can spend full spendable on each; we’ll re-check during allocation
         suggested = _suggest_bid_for_auction(a_id, a, comp, spendable)
         ev = _expected_points(a)
         efficiency = ev / max(1.0, suggested)
         plan.append((efficiency, a_id, suggested))
 
-    # Pick the best efficiencies first until we run out of gold
     plan.sort(reverse=True, key=lambda x: x[0])
 
     bids: Dict[str, float] = {}
@@ -160,16 +177,15 @@ def make_bid(
     return bids
 
 if __name__ == "__main__":
-    
     host = "localhost"
     agent_name = "{}_{}".format(os.path.basename(__file__), random.randint(1, 1000))
-    player_id = "agent_007_asdf"
+    player_id = "agent_007_wagwan"
     port = 8000
 
     game = AuctionGameClient(host=host,
-                                agent_name=agent_name,
-                                player_id=player_id,
-                                port=port)
+                             agent_name=agent_name,
+                             player_id=player_id,
+                             port=port)
     try:
         game.run(make_bid)
     except KeyboardInterrupt:
