@@ -13,7 +13,7 @@ FIRST_FAIR_PRICE_PER_POINT = 15.0
 WIN_MARGIN = 1.05
 MAX_SPEND_FRACTION = 0.95
 MIN_BID = 1.0
-TIE_JITTER_MAX = 3.0
+TIE_JITTER_MAX = 10.0
 LEARN_DECAY = 0.8
 CAP_BID_AT_GOLD = True
 IGNORE_LOW_EV = 0.5
@@ -24,15 +24,14 @@ manual_trigger = False
 def _listen_for_manual_trigger():
     """Background stdin listener. Type 'spend' (or 's') to trigger."""
     global manual_trigger
-    print("[Manual control] Type 'spend' and press Enter (or just press Enter) "
-          "to spend 20% of current gold across the 5 highest-EV auctions.")
+    print("[Manual control] Type 'spend' or just 's' and press Enter "
+          "to spend 20% of current gold across the 3 highest-EV auctions.")
     print("[Manual control] Type 'quit' or 'exit' to stop the listener.")
     try:
         for line in sys.stdin:
             cmd = (line or "").strip().lower()
             if cmd in {"spend", "s"}:
                 manual_trigger = True
-                print("[Manual control] Trigger set: next bid will spend 20% across top-5 EV.")
             elif cmd in {"quit", "exit", "q"}:
                 print("[Manual control] Listener exiting.")
                 break
@@ -134,13 +133,13 @@ def make_bid(
     my = states.get(agent_id, {}) or {}
     my_gold = float(my.get("gold", 0.0))
 
-    if manual_trigger and auctions:
+    if (manual_trigger and auctions) or (fucking_emergency and auctions):
         manual_trigger = False 
         spend_amount = 0.20 * my_gold
         if spend_amount > 0:
             top = sorted(auctions.items(),
                          key=lambda kv: _expected_points(kv[1]),
-                         reverse=True)[:5]
+                         reverse=True)[:3]
             if top:
                 per = max(MIN_BID, spend_amount / len(top))
                 bids = {a_id: round(per, 2) for a_id, _ in top}
@@ -177,9 +176,9 @@ def make_bid(
     return bids
 
 if __name__ == "__main__":
-    host = "localhost"
-    agent_name = "{}_{}".format(os.path.basename(__file__), random.randint(1, 1000))
-    player_id = "agent_007_wagwan"
+    host = "opentsetlin.com"
+    agent_name = "She said she was 12"
+    player_id = "Urs Erik Pfrommer"
     port = 8000
 
     game = AuctionGameClient(host=host,
